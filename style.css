@@ -1,0 +1,22 @@
+﻿.yaknet-sso-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #ff8f37 0%, #ff5e3a 100%);
+  color: #fff !important;
+  font-weight: 700;
+  padding: 10px 18px;
+  border-radius: 10px;
+  text-decoration: none;
+  margin: 12px 0;
+  box-shadow: 0 4px 15px rgba(255, 143, 55, 0.35);
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
+}
+
+.yaknet-sso-btn:hover {
+  transform: translateY(-2px);
+  opacity: 0.95;
+}

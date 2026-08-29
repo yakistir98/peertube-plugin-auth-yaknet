@@ -1,0 +1,33 @@
+{
+  "name": "peertube-plugin-auth-yaknet",
+  "version": "1.0.0",
+  "description": "YakNet SSO & OAuth2 Single Sign-On Authentication Plugin for PeerTube",
+  "main": "main.js",
+  "clientScripts": [
+    "client.js"
+  ],
+  "css": [
+    "style.css"
+  ],
+  "engine": {
+    "peertube": ">=5.0.0"
+  },
+  "keywords": [
+    "peertube",
+    "peertube-plugin",
+    "auth",
+    "sso",
+    "oauth2",
+    "yaknet",
+    "yakhub",
+    "fediverse",
+    "identity"
+  ],
+  "author": "Enes Yakıştır <yakistir98@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/enesyakistir/peertube-plugin-auth-yaknet.git"
+  },
+  "homepage": "https://yaktube.yakhub.com.tr",
+  "license": "MIT"
+}
