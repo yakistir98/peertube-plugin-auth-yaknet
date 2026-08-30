@@ -1,9 +1,9 @@
-﻿const crypto = require('crypto');
+const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
 
-let clientId = '01a03c41-f758-721e-b927-619bffde5c23';
-let clientSecret = 'hNx0p20XT8QI0Ut9irh0o5cvqW6rNQOuS2tgoqir';
+let clientId = '';
+let clientSecret = '';
 let authBaseUrl = 'https://auth.yakhub.com.tr';
 
 function postRequest(urlStr, data) {
@@ -86,22 +86,25 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     name: 'client-id',
     label: 'YakNet Client ID',
     type: 'input',
+    description: 'Your YakNet OAuth2 Client ID',
     private: false,
-    default: '01a03c41-f758-721e-b927-619bffde5c23'
+    default: ''
   });
 
   registerSetting({
     name: 'client-secret',
     label: 'YakNet Client Secret',
     type: 'input-password',
+    description: 'Your YakNet OAuth2 Client Secret',
     private: true,
-    default: 'hNx0p20XT8QI0Ut9irh0o5cvqW6rNQOuS2tgoqir'
+    default: ''
   });
 
   registerSetting({
     name: 'auth-base-url',
     label: 'YakNet Auth URL',
     type: 'input',
+    description: 'YakNet SSO Server URL (Default: https://auth.yakhub.com.tr)',
     private: false,
     default: 'https://auth.yakhub.com.tr'
   });
