@@ -1,6 +1,6 @@
 {
   "name": "peertube-plugin-auth-yaknet",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "YakNet SSO & OAuth2 Single Sign-On Authentication Plugin for PeerTube",
   "main": "main.js",
   "library": "./main.js",
