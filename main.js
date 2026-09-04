@@ -211,10 +211,9 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
       if (peertubeHelpers && peertubeHelpers.database && peertubeHelpers.database.query) {
         setTimeout(async () => {
           try {
-            await peertubeHelpers.database.query(
-              'UPDATE "user" SET "emailVerified" = true WHERE email = $1',
-              { bind: [email] }
-            );
+            await peertubeHelpers.database.query('UPDATE "user" SET "emailVerified" = true WHERE email = $1', {
+              bind: [email]
+            });
           } catch (e) {
             logger.warn('Failed to auto-verify email in DB for ' + email, e);
           }
