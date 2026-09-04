@@ -1,4 +1,3 @@
-﻿function register() {
-  console.log('[YakNet Auth] Client script loaded');
+function registerClient({ registerHook, peertubeHelpers }) {
+  // YakNet client script
 }
-module.exports = { register };
