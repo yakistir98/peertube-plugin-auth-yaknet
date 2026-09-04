@@ -207,6 +207,19 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
         displayName,
         role
       });
+
+      if (peertubeHelpers && peertubeHelpers.database && peertubeHelpers.database.query) {
+        setTimeout(async () => {
+          try {
+            await peertubeHelpers.database.query(
+              'UPDATE "user" SET "emailVerified" = true WHERE email = $1',
+              { bind: [email] }
+            );
+          } catch (e) {
+            logger.warn('Failed to auto-verify email in DB for ' + email, e);
+          }
+        }, 1000);
+      }
     } catch (err) {
       logger.error('Error processing YakNet auth callback:', err);
       return res.redirect('/login?externalAuthError=true');
