@@ -1,6 +1,6 @@
 function registerClient({ registerHook, peertubeHelpers }) {
   try {
-    fetch('/plugins/peertube-plugin-auth-yaknet/router/status')
+    fetch('/plugins/auth-yaknet/router/status')
       .then(function (r) {
         return r.json();
       })
@@ -15,7 +15,7 @@ function registerClient({ registerHook, peertubeHelpers }) {
 
         // If user directly visits /login without local override or error, forward to YakNet SSO
         if (isLoginUrl && !isLocal && !isError) {
-          window.location.replace('/plugins/peertube-plugin-auth-yaknet/router/auth');
+          window.location.replace('/plugins/auth-yaknet/router/auth');
           return;
         }
 
@@ -31,7 +31,7 @@ function registerClient({ registerHook, peertubeHelpers }) {
               if (isLoginBtn && !window.location.search.includes('local=true')) {
                 e.preventDefault();
                 e.stopPropagation();
-                window.location.href = '/plugins/peertube-plugin-auth-yaknet/router/auth';
+                window.location.href = '/plugins/auth-yaknet/router/auth';
               }
             }
           },
