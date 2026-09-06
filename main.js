@@ -109,13 +109,87 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     default: 'https://auth.yakhub.com.tr'
   });
 
+  registerSetting({
+    name: 'auto-redirect-login',
+    label: 'Giriş Sayfasında Doğrudan YakNet SSO\'ya Yönlendir',
+    type: 'input-checkbox',
+    description: 'Aktif olduğunda, kullanıcılar giriş butonuna veya /login sayfasına gittiğinde standart PeerTube şifre formu yerine doğrudan YakNet SSO sunucusuna yönlendirilir.',
+    private: false,
+    default: true
+  });
+
+  let autoRedirectLogin = true;
+
+  function syncConfigFiles(enable) {
+    const fs = require('fs');
+    const path = require('path');
+
+    // 1. Update local-production.json if present
+    const jsonCandidates = [
+      path.resolve(process.cwd(), 'config', 'local-production.json'),
+      path.resolve(__dirname, '..', '..', 'config', 'local-production.json'),
+      path.resolve(__dirname, '..', '..', '..', 'config', 'local-production.json'),
+      'c:/laragon/www/yaktube.yakhub.com.tr/config/local-production.json'
+    ];
+    for (const jPath of jsonCandidates) {
+      if (fs.existsSync(jPath)) {
+        try {
+          const cfg = JSON.parse(fs.readFileSync(jPath, 'utf8'));
+          if (!cfg.menu) cfg.menu = {};
+          if (!cfg.menu.login) cfg.menu.login = {};
+          if (cfg.menu.login.redirect_on_single_external_auth !== enable) {
+            cfg.menu.login.redirect_on_single_external_auth = enable;
+            fs.writeFileSync(jPath, JSON.stringify(cfg, null, 2), 'utf8');
+            logger.info(`[YakNet SSO] Synced local-production.json redirect_on_single_external_auth = ${enable}`);
+          }
+        } catch (e) {
+          logger.warn('[YakNet SSO] Error updating local-production.json:', e.message);
+        }
+        break;
+      }
+    }
+
+    // 2. Update production.yaml if present
+    const yamlCandidates = [
+      path.resolve(process.cwd(), 'config', 'production.yaml'),
+      path.resolve(__dirname, '..', '..', 'config', 'production.yaml'),
+      path.resolve(__dirname, '..', '..', '..', 'config', 'production.yaml'),
+      'c:/laragon/www/yaktube.yakhub.com.tr/config/production.yaml'
+    ];
+    for (const yPath of yamlCandidates) {
+      if (fs.existsSync(yPath)) {
+        try {
+          let yContent = fs.readFileSync(yPath, 'utf8');
+          const pattern = /(redirect_on_single_external_auth:\s*)(true|false)/;
+          if (pattern.test(yContent)) {
+            const updated = yContent.replace(pattern, `$1${enable}`);
+            if (updated !== yContent) {
+              fs.writeFileSync(yPath, updated, 'utf8');
+              logger.info(`[YakNet SSO] Synced production.yaml redirect_on_single_external_auth = ${enable}`);
+            }
+          }
+        } catch (e) {
+          logger.warn('[YakNet SSO] Error updating production.yaml:', e.message);
+        }
+        break;
+      }
+    }
+  }
+
   async function loadSettings() {
     const cid = await settingsManager.getSetting('client-id');
     const csec = await settingsManager.getSetting('client-secret');
     const burl = await settingsManager.getSetting('auth-base-url');
+    const autoRedir = await settingsManager.getSetting('auto-redirect-login');
     if (cid) clientId = cid;
     if (csec) clientSecret = csec;
     if (burl) authBaseUrl = burl.replace(/\/+$/, '');
+    if (autoRedir !== undefined && autoRedir !== null) {
+      autoRedirectLogin = autoRedir === true || autoRedir === 'true';
+    } else {
+      autoRedirectLogin = true;
+    }
+    syncConfigFiles(autoRedirectLogin);
   }
   await loadSettings();
   settingsManager.onSettingsChange(loadSettings);
@@ -134,6 +208,12 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
   });
 
   const router = getRouter();
+
+  router.get('/status', (req, res) => {
+    return res.json({
+      autoRedirectLogin: autoRedirectLogin !== false
+    });
+  });
 
   router.get('/auth', (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');

@@ -44,6 +44,7 @@ In your PeerTube admin panel (**Administration > Plugins / Themes > Settings** f
 - **Client ID:** Your registered YakNet OAuth2 Application Client ID.
 - **Client Secret:** Your YakNet OAuth2 Client Secret.
 - **Auth Base URL:** Default is `https://auth.yakhub.com.tr`.
+- **Auto-Redirect on Login:** Automatically bypass the standard login form and redirect users directly to YakNet SSO (also synchronizes `redirect_on_single_external_auth` in PeerTube configuration).
 
 ---
 
