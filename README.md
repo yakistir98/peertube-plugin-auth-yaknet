@@ -2,7 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PeerTube Engine](https://img.shields.io/badge/PeerTube-%3E%3D5.0.0-orange.svg)](https://joinpeertube.org)
-[![YakNet](https://img.shields.io/badge/YakNet-Federated%20Identity-blue.svg)](https://auth.yakhub.com.tr)
+[![YakNet](https://img.shields.io/badge/YakNet-Federated%20Identity-blue.svg)](https://developer-console.yakhub.com.tr)
 
 **English** | [Türkçe](#türkçe)
 
@@ -43,7 +43,7 @@ In your PeerTube admin panel (**Administration > Plugins / Themes > Settings** f
 
 - **Client ID:** Your registered YakNet OAuth2 Application Client ID.
 - **Client Secret:** Your YakNet OAuth2 Client Secret.
-- **Auth Base URL:** Default is `https://auth.yakhub.com.tr`.
+- **Auth Base URL:** Default is `https://developer-console.yakhub.com.tr`.
 - **Auto-Redirect on Login:** Automatically bypass the standard login form and redirect users directly to YakNet SSO (also synchronizes `redirect_on_single_external_auth` in PeerTube configuration).
 
 ---

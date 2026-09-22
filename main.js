@@ -4,7 +4,7 @@ const http = require('http');
 
 let clientId = '';
 let clientSecret = '';
-let authBaseUrl = 'https://auth.yakhub.com.tr';
+let authBaseUrl = 'https://developer-console.yakhub.com.tr';
 
 function postRequest(urlStr, data) {
   return new Promise((resolve, reject) => {
@@ -104,16 +104,17 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     name: 'auth-base-url',
     label: 'YakNet Auth URL',
     type: 'input',
-    description: 'YakNet SSO Server URL (Default: https://auth.yakhub.com.tr)',
+    description: 'YakNet SSO Server URL (Default: https://developer-console.yakhub.com.tr)',
     private: false,
-    default: 'https://auth.yakhub.com.tr'
+    default: 'https://developer-console.yakhub.com.tr'
   });
 
   registerSetting({
     name: 'auto-redirect-login',
-    label: 'Giriş Sayfasında Doğrudan YakNet SSO\'ya Yönlendir',
+    label: "Giriş Sayfasında Doğrudan YakNet SSO'ya Yönlendir",
     type: 'input-checkbox',
-    description: 'Aktif olduğunda, kullanıcılar giriş butonuna veya /login sayfasına gittiğinde standart PeerTube şifre formu yerine doğrudan YakNet SSO sunucusuna yönlendirilir.',
+    description:
+      'Aktif olduğunda, kullanıcılar giriş butonuna veya /login sayfasına gittiğinde standart PeerTube şifre formu yerine doğrudan YakNet SSO sunucusuna yönlendirilir.',
     private: false,
     default: true
   });
