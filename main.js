@@ -6,9 +6,20 @@ let clientId = '';
 let clientSecret = '';
 let authBaseUrl = 'https://developer-console.yakhub.com.tr';
 
-function postRequest(urlStr, data) {
+function normalizeAuthUrl(urlStr) {
+  if (typeof urlStr === 'string' && urlStr.includes('auth.yakhub.com.tr')) {
+    return urlStr.replace('auth.yakhub.com.tr', 'developer-console.yakhub.com.tr');
+  }
+  return urlStr;
+}
+
+function postRequest(urlStr, data, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
-    const url = new URL(urlStr);
+    if (maxRedirects <= 0) {
+      return reject(new Error('Too many redirects while calling YakNet auth server'));
+    }
+    const safeUrlStr = normalizeAuthUrl(urlStr);
+    const url = new URL(safeUrlStr);
     const postData = typeof data === 'string' ? data : new URLSearchParams(data).toString();
     const lib = url.protocol === 'https:' ? https : http;
 
@@ -26,6 +37,12 @@ function postRequest(urlStr, data) {
         }
       },
       res => {
+        // Follow 301, 302, 307, 308 redirects automatically
+        if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+          const nextUrl = new URL(res.headers.location, safeUrlStr).toString();
+          return resolve(postRequest(nextUrl, data, maxRedirects - 1));
+        }
+
         let body = '';
         res.on('data', chunk => (body += chunk));
         res.on('end', () => {
@@ -44,9 +61,13 @@ function postRequest(urlStr, data) {
   });
 }
 
-function getRequest(urlStr, token) {
+function getRequest(urlStr, token, maxRedirects = 5) {
   return new Promise((resolve, reject) => {
-    const url = new URL(urlStr);
+    if (maxRedirects <= 0) {
+      return reject(new Error('Too many redirects while calling YakNet auth server'));
+    }
+    const safeUrlStr = normalizeAuthUrl(urlStr);
+    const url = new URL(safeUrlStr);
     const lib = url.protocol === 'https:' ? https : http;
 
     const req = lib.request(
@@ -62,6 +83,12 @@ function getRequest(urlStr, token) {
         }
       },
       res => {
+        // Follow 301, 302, 307, 308 redirects automatically
+        if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
+          const nextUrl = new URL(res.headers.location, safeUrlStr).toString();
+          return resolve(getRequest(nextUrl, token, maxRedirects - 1));
+        }
+
         let body = '';
         res.on('data', chunk => (body += chunk));
         res.on('end', () => {
@@ -184,7 +211,9 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     const autoRedir = await settingsManager.getSetting('auto-redirect-login');
     if (cid) clientId = cid;
     if (csec) clientSecret = csec;
-    if (burl) authBaseUrl = burl.replace(/\/+$/, '');
+    if (burl) {
+      authBaseUrl = normalizeAuthUrl(burl.replace(/\/+$/, ''));
+    }
     if (autoRedir !== undefined && autoRedir !== null) {
       autoRedirectLogin = autoRedir === true || autoRedir === 'true';
     } else {
@@ -203,7 +232,7 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     authDisplayName: () => 'YakNet ile Giriş Yap',
     onAuthRequest: (req, res) => {
       const state = crypto.randomBytes(16).toString('hex');
-      const authUrl = `${authBaseUrl}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=&state=${state}`;
+      const authUrl = `${normalizeAuthUrl(authBaseUrl)}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=&state=${state}`;
       return res.redirect(authUrl);
     }
   });
@@ -218,7 +247,7 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
 
   router.get('/auth', (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');
-    const authUrl = `${authBaseUrl}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=&state=${state}`;
+    const authUrl = `${normalizeAuthUrl(authBaseUrl)}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=&state=${state}`;
     return res.redirect(authUrl);
   });
 
@@ -236,7 +265,8 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     }
 
     try {
-      const tokenRes = await postRequest(`${authBaseUrl}/oauth/token`, {
+      const targetAuthUrl = normalizeAuthUrl(authBaseUrl);
+      const tokenRes = await postRequest(`${targetAuthUrl}/oauth/token`, {
         grant_type: 'authorization_code',
         client_id: clientId,
         client_secret: clientSecret,
@@ -245,14 +275,14 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
       });
 
       if (!tokenRes.data || !tokenRes.data.access_token) {
-        logger.error('Failed to get access token from YakNet:', tokenRes);
+        logger.error('Failed to get access token from YakNet: ' + JSON.stringify(tokenRes));
         return res.redirect('/login?externalAuthError=true');
       }
 
       const accessToken = tokenRes.data.access_token;
-      const userRes = await getRequest(`${authBaseUrl}/api/user`, accessToken);
+      const userRes = await getRequest(`${targetAuthUrl}/api/user`, accessToken);
       if (!userRes.data || !userRes.data.email) {
-        logger.error('Failed to get user profile from YakNet:', userRes);
+        logger.error('Failed to get user profile from YakNet: ' + JSON.stringify(userRes));
         return res.redirect('/login?externalAuthError=true');
       }
 

@@ -1,4 +1,4 @@
-function registerClient({ registerHook, peertubeHelpers }) {
+async function register({ registerHook, peertubeHelpers }) {
   try {
     fetch('/plugins/auth-yaknet/router/status')
       .then(function (r) {
@@ -53,6 +53,5 @@ function registerClient({ registerHook, peertubeHelpers }) {
   }
 }
 
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { registerClient: registerClient };
-}
+export { register, register as registerClient };
+export default register;
