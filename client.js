@@ -1,5 +1,50 @@
 async function register({ registerHook, peertubeHelpers }) {
   try {
+    function saveReturnUrlBeforeLogin() {
+      try {
+        var currentPath = window.location.pathname + window.location.search + window.location.hash;
+        if (currentPath && !window.location.pathname.includes('/login')) {
+          localStorage.setItem('yaktube_return_url', currentPath);
+          localStorage.setItem('yaktube_return_url_time', String(Date.now()));
+          sessionStorage.setItem('yaktube_return_url', currentPath);
+          sessionStorage.setItem('redirect-url-after-login', currentPath);
+        }
+      } catch (e) {}
+    }
+
+    function checkPendingPostLoginRedirect() {
+      try {
+        if (window.location.pathname.includes('/login')) return;
+        var token = localStorage.getItem('access_token');
+        if (!token) return;
+        var savedUrl =
+          localStorage.getItem('yaktube_return_url') ||
+          sessionStorage.getItem('yaktube_return_url') ||
+          sessionStorage.getItem('redirect-url-after-login');
+        if (!savedUrl) return;
+        var savedTime = parseInt(localStorage.getItem('yaktube_return_url_time') || '0', 10);
+        localStorage.removeItem('yaktube_return_url');
+        localStorage.removeItem('yaktube_return_url_time');
+        sessionStorage.removeItem('yaktube_return_url');
+        sessionStorage.removeItem('redirect-url-after-login');
+        if (savedTime && Date.now() - savedTime > 15 * 60 * 1000) return;
+        var currentFull = window.location.pathname + window.location.search + window.location.hash;
+        if (
+          typeof savedUrl === 'string' &&
+          savedUrl.startsWith('/') &&
+          !savedUrl.startsWith('//') &&
+          !savedUrl.startsWith('/login') &&
+          savedUrl !== currentFull
+        ) {
+          window.location.replace(savedUrl);
+        }
+      } catch (e) {}
+    }
+
+    checkPendingPostLoginRedirect();
+    window.addEventListener('popstate', checkPendingPostLoginRedirect);
+    setInterval(checkPendingPostLoginRedirect, 800);
+
     fetch('/plugins/auth-yaknet/router/status')
       .then(function (r) {
         return r.json();
@@ -36,6 +81,7 @@ async function register({ registerHook, peertubeHelpers }) {
               ) {
                 e.preventDefault();
                 e.stopPropagation();
+                saveReturnUrlBeforeLogin();
                 window.location.href = '/plugins/auth-yaknet/router/auth';
               }
             }
