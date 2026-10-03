@@ -5,6 +5,7 @@ const http = require('http');
 let clientId = '';
 let clientSecret = '';
 let authBaseUrl = 'https://developer-console.yakhub.com.tr';
+let customCallbackUrl = '';
 
 function normalizeAuthUrl(urlStr) {
   if (typeof urlStr === 'string' && urlStr.includes('auth.yakhub.com.tr')) {
@@ -37,7 +38,6 @@ function postRequest(urlStr, data, maxRedirects = 5) {
         }
       },
       res => {
-        // Follow 301, 302, 307, 308 redirects automatically
         if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
           const nextUrl = new URL(res.headers.location, safeUrlStr).toString();
           return resolve(postRequest(nextUrl, data, maxRedirects - 1));
@@ -83,7 +83,6 @@ function getRequest(urlStr, token, maxRedirects = 5) {
         }
       },
       res => {
-        // Follow 301, 302, 307, 308 redirects automatically
         if ([301, 302, 307, 308].includes(res.statusCode) && res.headers.location) {
           const nextUrl = new URL(res.headers.location, safeUrlStr).toString();
           return resolve(getRequest(nextUrl, token, maxRedirects - 1));
@@ -108,6 +107,12 @@ function getRequest(urlStr, token, maxRedirects = 5) {
 
 async function register({ registerExternalAuth, registerSetting, settingsManager, getRouter, peertubeHelpers }) {
   const logger = peertubeHelpers.logger;
+  const webserverUrl = (peertubeHelpers.config.getWebserverUrl() || '').replace(/\/+$/, '');
+  const isOfficialYakTube = webserverUrl.includes('yaktube.yakhub.com.tr');
+  // Standard PeerTube plugin router path uses short name (/plugins/auth-yaknet/router/auth-callback)
+  const defaultCallbackUrl = isOfficialYakTube
+    ? `${webserverUrl}/plugins/peertube-plugin-auth-yaknet/router/auth-callback`
+    : `${webserverUrl}/plugins/auth-yaknet/router/auth-callback`;
 
   registerSetting({
     name: 'client-id',
@@ -137,6 +142,15 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
   });
 
   registerSetting({
+    name: 'callback-url',
+    label: 'OAuth Callback (Redirect) URL (Opsiyonel)',
+    type: 'input',
+    description: `Boş bırakılırsa otomatik olarak "${defaultCallbackUrl}" kullanılır. YakNet Geliştirici Konsolu'nda tanımladığınız Redirect URI adresini buraya yazabilirsiniz.`,
+    private: false,
+    default: ''
+  });
+
+  registerSetting({
     name: 'auto-redirect-login',
     label: "Giriş Sayfasında Doğrudan YakNet SSO'ya Yönlendir",
     type: 'input-checkbox',
@@ -151,6 +165,14 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
   function syncConfigFiles(enable) {
     const fs = require('fs');
     const path = require('path');
+
+    // Update in-memory PeerTube ServerConfig if accessible
+    try {
+      const srvCfg = peertubeHelpers.config.getServerConfig();
+      if (srvCfg && srvCfg.client && srvCfg.client.menu && srvCfg.client.menu.login) {
+        srvCfg.client.menu.login.redirectOnSingleExternalAuth = enable;
+      }
+    } catch (e) {}
 
     // 1. Update local-production.json if present
     const jsonCandidates = [
@@ -208,12 +230,14 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     const cid = await settingsManager.getSetting('client-id');
     const csec = await settingsManager.getSetting('client-secret');
     const burl = await settingsManager.getSetting('auth-base-url');
+    const cburl = await settingsManager.getSetting('callback-url');
     const autoRedir = await settingsManager.getSetting('auto-redirect-login');
-    if (cid) clientId = cid;
-    if (csec) clientSecret = csec;
-    if (burl) {
-      authBaseUrl = normalizeAuthUrl(burl.replace(/\/+$/, ''));
+    if (cid) clientId = String(cid).trim();
+    if (csec) clientSecret = String(csec).trim();
+    if (burl && String(burl).trim()) {
+      authBaseUrl = normalizeAuthUrl(String(burl).trim().replace(/\/+$/, ''));
     }
+    customCallbackUrl = cburl ? String(cburl).trim() : '';
     if (autoRedir !== undefined && autoRedir !== null) {
       autoRedirectLogin = autoRedir === true || autoRedir === 'true';
     } else {
@@ -224,15 +248,26 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
   await loadSettings();
   settingsManager.onSettingsChange(loadSettings);
 
-  const webserverUrl = peertubeHelpers.config.getWebserverUrl();
-  const callbackUrl = `${webserverUrl}/plugins/peertube-plugin-auth-yaknet/router/auth-callback`;
+  function getActiveCallbackUrl() {
+    return customCallbackUrl || defaultCallbackUrl;
+  }
+
+  async function dbQuery(sql, bindParams = []) {
+    if (!peertubeHelpers || !peertubeHelpers.database || typeof peertubeHelpers.database.query !== 'function') {
+      return [];
+    }
+    const res = await peertubeHelpers.database.query(sql, { bind: bindParams });
+    if (Array.isArray(res) && Array.isArray(res[0])) return res[0];
+    return Array.isArray(res) ? res : [];
+  }
 
   const externalAuth = registerExternalAuth({
     authName: 'yaknet',
     authDisplayName: () => 'YakNet ile Giriş Yap',
     onAuthRequest: (req, res) => {
       const state = crypto.randomBytes(16).toString('hex');
-      const authUrl = `${normalizeAuthUrl(authBaseUrl)}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=&state=${state}`;
+      const cbUrl = getActiveCallbackUrl();
+      const authUrl = `${normalizeAuthUrl(authBaseUrl)}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(cbUrl)}&response_type=code&scope=&state=${state}`;
       return res.redirect(authUrl);
     }
   });
@@ -241,17 +276,20 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
 
   router.get('/status', (req, res) => {
     return res.json({
-      autoRedirectLogin: autoRedirectLogin !== false
+      autoRedirectLogin: autoRedirectLogin !== false,
+      callbackUrl: getActiveCallbackUrl()
     });
   });
 
   router.get('/auth', (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');
-    const authUrl = `${normalizeAuthUrl(authBaseUrl)}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(callbackUrl)}&response_type=code&scope=&state=${state}`;
+    const cbUrl = getActiveCallbackUrl();
+    const authUrl = `${normalizeAuthUrl(authBaseUrl)}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(cbUrl)}&response_type=code&scope=&state=${state}`;
     return res.redirect(authUrl);
   });
 
-  router.get('/auth-callback', async (req, res) => {
+  async function handleOAuthCallback(req, res) {
+    await loadSettings();
     const code = req.query.code;
     const error = req.query.error;
 
@@ -266,11 +304,12 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
 
     try {
       const targetAuthUrl = normalizeAuthUrl(authBaseUrl);
+      const cbUrl = getActiveCallbackUrl();
       const tokenRes = await postRequest(`${targetAuthUrl}/oauth/token`, {
         grant_type: 'authorization_code',
         client_id: clientId,
         client_secret: clientSecret,
-        redirect_uri: callbackUrl,
+        redirect_uri: cbUrl,
         code: code
       });
 
@@ -308,6 +347,30 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
           ? 0
           : 2;
 
+      // Pre-sync with PeerTube DB so existing accounts or username collisions never fail without bridge.js
+      try {
+        const existingByEmail = await dbQuery(
+          `SELECT id, username FROM "user" WHERE LOWER(email) = LOWER($1) LIMIT 1`,
+          [email]
+        );
+        if (existingByEmail.length > 0) {
+          username = existingByEmail[0].username;
+          await dbQuery(
+            `UPDATE "user" SET "pluginAuth" = 'peertube-plugin-auth-yaknet', "emailVerified" = true WHERE id = $1`,
+            [existingByEmail[0].id]
+          );
+        } else {
+          const existingByUsername = await dbQuery(`SELECT id FROM "user" WHERE LOWER(username) = LOWER($1) LIMIT 1`, [
+            username
+          ]);
+          if (existingByUsername.length > 0) {
+            username = (username.substring(0, 42) + '_' + crypto.randomBytes(2).toString('hex')).toLowerCase();
+          }
+        }
+      } catch (dbErr) {
+        logger.warn('[YakNet SSO] Pre-sync DB warning: ' + dbErr.message);
+      }
+
       logger.info(`YakNet Authenticated user: ${username} (${email})`);
 
       externalAuth.userAuthenticated({
@@ -319,24 +382,37 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
         role
       });
 
-      if (peertubeHelpers && peertubeHelpers.database && peertubeHelpers.database.query) {
-        setTimeout(async () => {
-          try {
-            await peertubeHelpers.database.query('UPDATE "user" SET "emailVerified" = true WHERE email = $1', {
-              bind: [email]
-            });
-          } catch (e) {
-            logger.warn('Failed to auto-verify email in DB for ' + email, e);
-          }
-        }, 1000);
-      }
+      setTimeout(async () => {
+        try {
+          await dbQuery(
+            `UPDATE "user" SET "emailVerified" = true, "pluginAuth" = 'peertube-plugin-auth-yaknet' WHERE LOWER(email) = LOWER($1)`,
+            [email]
+          );
+        } catch (e) {}
+      }, 1000);
     } catch (err) {
       logger.error('Error processing YakNet auth callback:', err);
       return res.redirect('/login?externalAuthError=true');
     }
-  });
+  }
 
-  logger.info('YakNet SSO Plugin initialized with Callback URL: ' + callbackUrl);
+  router.get('/auth-callback', handleOAuthCallback);
+
+  // Also support legacy /plugins/peertube-plugin-auth-yaknet/router/auth-callback on any PeerTube server without bridge.js
+  try {
+    if (peertubeHelpers && peertubeHelpers.server && typeof peertubeHelpers.server.getHTTPServer === 'function') {
+      const httpServer = peertubeHelpers.server.getHTTPServer();
+      const listeners = httpServer ? httpServer.listeners('request') : [];
+      const expressApp = listeners && listeners[0];
+      if (expressApp && typeof expressApp.get === 'function') {
+        expressApp.get('/plugins/peertube-plugin-auth-yaknet/router/auth-callback', (req, res) => {
+          return handleOAuthCallback(req, res);
+        });
+      }
+    }
+  } catch (e) {}
+
+  logger.info('YakNet SSO Plugin initialized with Callback URL: ' + getActiveCallbackUrl());
 }
 
 async function unregister() {
