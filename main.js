@@ -34,7 +34,7 @@ function postRequest(urlStr, data, maxRedirects = 5) {
           'Content-Type': 'application/x-www-form-urlencoded',
           Accept: 'application/json',
           'Content-Length': Buffer.byteLength(postData),
-          'User-Agent': 'YakTube-SSO/1.0'
+          'User-Agent': 'YakTube-SSO/1.1'
         }
       },
       res => {
@@ -79,7 +79,7 @@ function getRequest(urlStr, token, maxRedirects = 5) {
         headers: {
           Authorization: 'Bearer ' + token,
           Accept: 'application/json',
-          'User-Agent': 'YakTube-SSO/1.0'
+          'User-Agent': 'YakTube-SSO/1.1'
         }
       },
       res => {
@@ -109,11 +109,11 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
   const logger = peertubeHelpers.logger;
   const webserverUrl = (peertubeHelpers.config.getWebserverUrl() || '').replace(/\/+$/, '');
   const isOfficialYakTube = webserverUrl.includes('yaktube.yakhub.com.tr');
-  // Standard PeerTube plugin router path uses short name (/plugins/auth-yaknet/router/auth-callback)
   const defaultCallbackUrl = isOfficialYakTube
     ? `${webserverUrl}/plugins/peertube-plugin-auth-yaknet/router/auth-callback`
     : `${webserverUrl}/plugins/auth-yaknet/router/auth-callback`;
 
+  // 1. Core OAuth2 Credentials
   registerSetting({
     name: 'client-id',
     label: 'YakNet Client ID',
@@ -150,6 +150,7 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     default: ''
   });
 
+  // 2. Navigation & Redirect Controls
   registerSetting({
     name: 'auto-redirect-login',
     label: "Giriş Sayfasında Doğrudan YakNet SSO'ya Yönlendir",
@@ -160,7 +161,73 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     default: true
   });
 
+  registerSetting({
+    name: 'show-account-link',
+    label: 'Kullanıcı Menüsünde "YakNet Hesabım" Bağlantısı',
+    type: 'input-checkbox',
+    description:
+      'Aktif olduğunda, oturum açmış kullanıcıların sol menüsünde ve profil açılır menüsünde merkezi YakNet profil yönetim bağlantısı görüntülenir.',
+    private: false,
+    default: true
+  });
+
+  registerSetting({
+    name: 'show-login-button',
+    label: 'Giriş Sayfasında Belirgin YakNet Butonu Göster',
+    type: 'input-checkbox',
+    description:
+      'Aktif olduğunda, doğrudan yönlendirme kapalıyken veya yerel admin girişinde (/login?local=true) giriş formunun üzerinde şık bir "YakNet ile Tek Tıkla Giriş Yap" butonu görüntülenir.',
+    private: false,
+    default: true
+  });
+
+  registerSetting({
+    name: 'show-error-hints',
+    label: 'Giriş Hatalarında Yardımcı Açıklama Göster',
+    type: 'input-checkbox',
+    description:
+      'Giriş başarısız olduğunda (örneğin kullanıcının e-posta onayı eksikse veya iptal edildiyse) kullanıcıya bilgilendirici ve yönlendirici bir uyarı kutusu gösterir.',
+    private: false,
+    default: true
+  });
+
+  registerSetting({
+    name: 'sync-display-name',
+    label: 'Görünen Adı (Display Name) Otomatik Eşitle',
+    type: 'input-checkbox',
+    description:
+      "Kullanıcının YakNet profilindeki ad ve soyadını her girişte PeerTube'daki görünen adıyla senkronize eder.",
+    private: false,
+    default: true
+  });
+
+  registerSetting({
+    name: 'default-video-quota',
+    label: 'Yeni Üyeler İçin Toplam Video Kotası (MB)',
+    type: 'input',
+    description:
+      'YakNet ile kaydolan üyelere atanacak toplam video depolama alanı kotası (Megabayt). 0 bırakılırsa sunucunun genel varsayılan kotası kullanılır; sınırsız için -1 yazın.',
+    private: false,
+    default: '0'
+  });
+
+  registerSetting({
+    name: 'default-daily-video-quota',
+    label: 'Yeni Üyeler İçin Günlük Video Kotası (MB)',
+    type: 'input',
+    description:
+      'YakNet ile kaydolan üyelere atanacak günlük video yükleme kotası (Megabayt). 0 bırakılırsa sunucunun genel varsayılan kotası kullanılır; sınırsız için -1 yazın.',
+    private: false,
+    default: '0'
+  });
+
   let autoRedirectLogin = true;
+  let showAccountLink = true;
+  let showLoginButton = true;
+  let showErrorHints = true;
+  let syncDisplayName = true;
+  let defaultVideoQuota = 0;
+  let defaultDailyVideoQuota = 0;
 
   function syncConfigFiles(enable) {
     const fs = require('fs');
@@ -232,19 +299,65 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
     const burl = await settingsManager.getSetting('auth-base-url');
     const cburl = await settingsManager.getSetting('callback-url');
     const autoRedir = await settingsManager.getSetting('auto-redirect-login');
+    const sAccountLink = await settingsManager.getSetting('show-account-link');
+    const sLoginBtn = await settingsManager.getSetting('show-login-button');
+    const sErrorHints = await settingsManager.getSetting('show-error-hints');
+    const sSyncDisplay = await settingsManager.getSetting('sync-display-name');
+    const sQuota = await settingsManager.getSetting('default-video-quota');
+    const sDailyQuota = await settingsManager.getSetting('default-daily-video-quota');
+
     if (cid) clientId = String(cid).trim();
     if (csec) clientSecret = String(csec).trim();
     if (burl && String(burl).trim()) {
       authBaseUrl = normalizeAuthUrl(String(burl).trim().replace(/\/+$/, ''));
     }
     customCallbackUrl = cburl ? String(cburl).trim() : '';
+
     if (autoRedir !== undefined && autoRedir !== null) {
       autoRedirectLogin = autoRedir === true || autoRedir === 'true';
     } else {
       autoRedirectLogin = true;
     }
+
+    if (sAccountLink !== undefined && sAccountLink !== null) {
+      showAccountLink = sAccountLink === true || sAccountLink === 'true';
+    } else {
+      showAccountLink = true;
+    }
+
+    if (sLoginBtn !== undefined && sLoginBtn !== null) {
+      showLoginButton = sLoginBtn === true || sLoginBtn === 'true';
+    } else {
+      showLoginButton = true;
+    }
+
+    if (sErrorHints !== undefined && sErrorHints !== null) {
+      showErrorHints = sErrorHints === true || sErrorHints === 'true';
+    } else {
+      showErrorHints = true;
+    }
+
+    if (sSyncDisplay !== undefined && sSyncDisplay !== null) {
+      syncDisplayName = sSyncDisplay === true || sSyncDisplay === 'true';
+    } else {
+      syncDisplayName = true;
+    }
+
+    if (sQuota !== undefined && sQuota !== null && String(sQuota).trim() !== '') {
+      defaultVideoQuota = parseInt(String(sQuota).trim(), 10) || 0;
+    } else {
+      defaultVideoQuota = 0;
+    }
+
+    if (sDailyQuota !== undefined && sDailyQuota !== null && String(sDailyQuota).trim() !== '') {
+      defaultDailyVideoQuota = parseInt(String(sDailyQuota).trim(), 10) || 0;
+    } else {
+      defaultDailyVideoQuota = 0;
+    }
+
     syncConfigFiles(autoRedirectLogin);
   }
+
   await loadSettings();
   settingsManager.onSettingsChange(loadSettings);
 
@@ -277,6 +390,11 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
   router.get('/status', (req, res) => {
     return res.json({
       autoRedirectLogin: autoRedirectLogin !== false,
+      showAccountLink: showAccountLink !== false,
+      showLoginButton: showLoginButton !== false,
+      showErrorHints: showErrorHints !== false,
+      syncDisplayName: syncDisplayName !== false,
+      authBaseUrl: normalizeAuthUrl(authBaseUrl),
       callbackUrl: getActiveCallbackUrl()
     });
   });
@@ -373,14 +491,28 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
 
       logger.info(`YakNet Authenticated user: ${username} (${email})`);
 
-      externalAuth.userAuthenticated({
+      const authPayload = {
         req,
         res,
         username,
         email,
         displayName,
         role
-      });
+      };
+
+      if (defaultVideoQuota > 0) {
+        authPayload.videoQuota = defaultVideoQuota * 1024 * 1024;
+      } else if (defaultVideoQuota === -1) {
+        authPayload.videoQuota = -1;
+      }
+
+      if (defaultDailyVideoQuota > 0) {
+        authPayload.videoQuotaDaily = defaultDailyVideoQuota * 1024 * 1024;
+      } else if (defaultDailyVideoQuota === -1) {
+        authPayload.videoQuotaDaily = -1;
+      }
+
+      externalAuth.userAuthenticated(authPayload);
 
       setTimeout(async () => {
         try {
@@ -388,6 +520,12 @@ async function register({ registerExternalAuth, registerSetting, settingsManager
             `UPDATE "user" SET "emailVerified" = true, "pluginAuth" = 'peertube-plugin-auth-yaknet' WHERE LOWER(email) = LOWER($1)`,
             [email]
           );
+          if (syncDisplayName && displayName) {
+            await dbQuery(
+              `UPDATE "account" SET "name" = $1 WHERE "userId" IN (SELECT id FROM "user" WHERE LOWER(email) = LOWER($2))`,
+              [displayName, email]
+            );
+          }
         } catch (e) {}
       }, 1000);
     } catch (err) {
